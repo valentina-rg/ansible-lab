@@ -1,0 +1,73 @@
+---
+- name: Configure LDAP client authentication
+  hosts: monitoring
+  become: yes
+  
+  vars:
+    ldap_server_ip: "10.0.2.10"
+    ldap_base_dn: "dc=lab,dc=local"
+  
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+    
+    - name: Install LDAP client packages
+      apt:
+        name:
+          - libnss-ldap
+          - libpam-ldap
+          - ldap-utils
+          - nscd
+        state: present
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+    
+    - name: Configure LDAP client settings
+      debconf:
+        name: "{{ item.name }}"
+        question: "{{ item.question }}"
+        value: "{{ item.value }}"
+        vtype: "{{ item.vtype }}"
+      loop:
+        - name: libnss-ldap
+          question: libnss-ldap/ldapns/ldap-server
+          value: "ldap://{{ ldap_server_ip }}/"
+          vtype: string
+        - name: libnss-ldap
+          question: libnss-ldap/ldapns/base-dn
+          value: "{{ ldap_base_dn }}"
+          vtype: string
+    
+    - name: Configure NSS to use LDAP
+      lineinfile:
+        path: /etc/nsswitch.conf
+        regexp: "^{{ item.key }}:"
+        line: "{{ item.key }}: {{ item.value }}"
+        backup: yes
+      loop:
+        - { key: 'passwd', value: 'compat ldap' }
+        - { key: 'group', value: 'compat ldap' }
+        - { key: 'shadow', value: 'compat ldap' }
+    
+    - name: Configure PAM for LDAP authentication
+      lineinfile:
+        path: /etc/pam.d/common-session
+        line: "session required pam_mkhomedir.so skel=/etc/skel umask=077"
+        insertafter: EOF
+    
+    - name: Create LDAP config file
+      copy:
+        dest: /etc/ldap.conf
+        content: |
+          base {{ ldap_base_dn }}
+          uri ldap://{{ ldap_server_ip }}/
+          ldap_version 3
+          pam_password md5
+        mode: '0644'
+    
+    - name: Restart nscd service
+      systemd:
+        name: nscd
+        state: restarted
+        enabled: yes
