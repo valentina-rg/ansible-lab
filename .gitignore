@@ -4,6 +4,7 @@
 id_rsa*
 vault_pass.txt
 inventory/hosts
+inventory/group_vars/*/vault.yml
 
 # File temporanei
 *.retry
