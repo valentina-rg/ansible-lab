@@ -1,0 +1,111 @@
+---
+- name: Populate LDAP with OUs, groups and users
+  hosts: ldap
+  become: yes
+  
+  vars:
+    ldap_base_dn: "dc=lab,dc=local"
+    ldap_admin: "{{ vault_ldap_admin_password }}"
+  
+  tasks:
+    - name: Create LDIF for Organizational Units
+      copy:
+        dest: /tmp/base_structure.ldif
+        content: |
+          dn: ou=users,dc=lab,dc=local
+          objectClass: organizationalUnit
+          ou: users
+
+          dn: ou=groups,dc=lab,dc=local
+          objectClass: organizationalUnit
+          ou: groups
+    
+    - name: Add OUs to LDAP
+      shell: ldapadd -x -D "cn=admin,dc=lab,dc=local" -w "{{ ldap_admin_password }}" -f /tmp/base_structure.ldif
+      register: ldap_ou_result
+      failed_when: 
+        - ldap_ou_result.rc != 0
+        - "'Already exists' not in ldap_ou_result.stderr"
+      changed_when: ldap_ou_result.rc == 0
+    
+    - name: Create LDIF for groups
+      copy:
+        dest: /tmp/groups.ldif
+        content: |
+          dn: cn=admins,ou=groups,dc=lab,dc=local
+          objectClass: posixGroup
+          cn: admins
+          gidNumber: 5000
+
+          dn: cn=developers,ou=groups,dc=lab,dc=local
+          objectClass: posixGroup
+          cn: developers
+          gidNumber: 5001
+    
+    - name: Add groups to LDAP
+      shell: ldapadd -x -D "cn=admin,dc=lab,dc=local" -w "{{ ldap_admin_password }}" -f /tmp/groups.ldif
+      register: ldap_groups_result
+      failed_when: 
+        - ldap_groups_result.rc != 0
+        - "'Already exists' not in ldap_groups_result.stderr"
+      changed_when: ldap_groups_result.rc == 0
+    
+    - name: Create LDIF for users
+      copy:
+        dest: /tmp/users.ldif
+        content: |
+          dn: uid=mario,ou=users,dc=lab,dc=local
+          objectClass: inetOrgPerson
+          objectClass: posixAccount
+          objectClass: shadowAccount
+          uid: mario
+          cn: Mario Rossi
+          sn: Rossi
+          loginShell: /bin/bash
+          uidNumber: 10000
+          gidNumber: 5001
+          homeDirectory: /home/mario
+          userPassword: {SSHA}mario123
+
+          dn: uid=luigi,ou=users,dc=lab,dc=local
+          objectClass: inetOrgPerson
+          objectClass: posixAccount
+          objectClass: shadowAccount
+          uid: luigi
+          cn: Luigi Verdi
+          sn: Verdi
+          loginShell: /bin/bash
+          uidNumber: 10001
+          gidNumber: 5001
+          homeDirectory: /home/luigi
+          userPassword: {SSHA}luigi123
+
+          dn: uid=admin,ou=users,dc=lab,dc=local
+          objectClass: inetOrgPerson
+          objectClass: posixAccount
+          objectClass: shadowAccount
+          uid: admin
+          cn: Admin User
+          sn: Admin
+          loginShell: /bin/bash
+          uidNumber: 10002
+          gidNumber: 5000
+          homeDirectory: /home/admin
+          userPassword: {SSHA}admin123
+    
+    - name: Add users to LDAP
+      shell: ldapadd -x -D "cn=admin,dc=lab,dc=local" -w "{{ ldap_admin_password }}" -f /tmp/users.ldif
+      register: ldap_users_result
+      failed_when: 
+        - ldap_users_result.rc != 0
+        - "'Already exists' not in ldap_users_result.stderr"
+      changed_when: ldap_users_result.rc == 0
+    
+    - name: Clean up temporary LDIF files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/base_structure.ldif
+        - /tmp/groups.ldif
+        - /tmp/users.ldif
