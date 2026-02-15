@@ -1,0 +1,13 @@
+# File sensibili
+*.pem
+*.key
+id_rsa*
+vault_pass.txt
+inventory/hosts
+
+# File temporanei
+*.retry
+*.log
+*.pyc
+.DS_Store
+__pycache__/

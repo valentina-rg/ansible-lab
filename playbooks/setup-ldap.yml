@@ -1,0 +1,70 @@
+---
+- name: Setup OpenLDAP Server
+  hosts: ldap
+  become: yes
+
+  vars:
+    ldap_domain: "lab.local"
+    ldap_base_dn: "dc=lab,dc=local"
+    ldap_admin_password: "{{ vault_ldap_admin_password }}"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install debconf-utils
+      apt:
+        name: debconf-utils
+        state: present
+
+    - name: Preseed slapd domain
+      debconf:
+        name: slapd
+        question: slapd/password1
+        value: "{{ ldap_admin_password }}"
+        vtype: password
+    
+    - name: Preseed admin password 1
+      debconf:
+        name: slapd
+        question: slapd/password1
+        value: "{{ ldap_admin_password }}"
+        vtype: password
+
+    - name: Preseed admin password 2
+      debconf:
+        name: slapd
+        question: slapd/password2
+        value: "{{ ldap_admin_password }}"
+        vtype: password 
+
+    - name: Install OpenLDAP packages
+      apt:
+        name:
+          - slapd
+          - ldap-utils
+        state: present
+
+    - name: Reconfigure slapd for domain
+      debconf:
+        name: slapd
+        question: "{{ item.question }}"
+        value: "{{ item.value }}"
+        vtype: "{{ item.vtype }}"
+      loop:
+        - question: 'slapd/domain'
+          value: '{{ ldap_domain }}'
+          vtype: 'string' 
+        - question: 'slapd/password1'
+          value: '{{ ldap_admin_password }}'
+          vtype: 'password' 
+        - question: 'slapd/password2'
+          value: '{{ ldap_admin_password }}'
+          vtype: 'password' 
+
+    - name: Restart slapd service
+      systemd:
+        name: slapd
+        state: restarted
+        enabled: yes    
